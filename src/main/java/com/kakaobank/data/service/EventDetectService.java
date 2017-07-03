@@ -50,15 +50,26 @@ public class EventDetectService {
         String accountNo = event.getAccountNo();
         Account account = (Account) redisDao.getValue(BANK_ACCOUNT_KEY + accountNo);
 
-        switch (eventDetector.getDetectorType()) {
-            case "create":
-                isDetect = isDetectCreatedTime(eventDetector, event, account);
-                break;
-            case "balance":
-                isDetect = isDetectBalance(eventDetector, event);
-            default:
-                isDetect = isDetectAmountAndTime(eventDetector, event);
+        // 이전 이벤트가 탐지조건에 이미 탐지되었는지 확인
+        String detectedEventRedisKey = BANK_DETECT_KEY + eventDetector.getDetectorGroupId() + "::" + eventDetector.getDetectorId() + "::" + event.getAccountNo();
+        Boolean isExistDetected = redisDao.isExist(detectedEventRedisKey);
+        if(isExistDetected) {
+            log.info("Detected : " + eventDetector);
+            isDetect = true;
+        }else{
+            switch (eventDetector.getDetectorType()) {
+                case "create":
+                    isDetect = isDetectCreatedTime(eventDetector, event, account);
+                    break;
+                case "balance":
+                    isDetect = isDetectBalance(eventDetector, event);
+                    break;
+                default:
+                    isDetect = isDetectAmountAndTime(eventDetector, event);
+                    break;
+            }
         }
+
         // 마지막 조건에 탐지되면 Kafka 'detect' Topic 에 메시지 발송
         if (isDetect && eventDetector.getNextDetectorId() == null) {
             String msg = "Detect Fraud Event ! , EventDetector ID : " + eventDetector.getDetectorGroupId() + ", Account : " + account + ", Event : " + event;
@@ -68,10 +79,12 @@ public class EventDetectService {
         return isDetect;
     }
 
+    // 생성시간 조건 탐지
     private Boolean isDetectCreatedTime(EventDetector eventDetector, Event event, Account account) {
         Boolean isDetect = false;
         // 계좌 생성시간
         Long createdTime = account.getCreatedTime();
+
         // 계좌 생생시간 조건
         isDetect = checkTimeCondition(eventDetector, createdTime);
 
@@ -80,18 +93,19 @@ public class EventDetectService {
             try {
                 saveDetectedEvent(eventDetector, event);
             } catch (Exception e) {
-                log.error("Failed Save detected event ! : " + eventDetector + " & " + event);
+                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => "+e.getMessage());
             }
         }
         return isDetect;
     }
 
+    // 잔액 조건 탐지
     private Boolean isDetectBalance(EventDetector eventDetector, Event event) {
         Boolean isDetect = false;
         // 계좌 잔액 정보
         Account account = (Account) redisDao.getValue(BANK_ACCOUNT_KEY + event.getAccountNo());
         // 이전 조건에서 탐지된 이벤트 발생 시간 가져오기
-        String detectedEventRedisKey = BANK_DETECT_KEY + eventDetector.getDetectorGroupId() + "::" + eventDetector.getDetectorId() + "::" + event.getAccountNo();
+        String detectedEventRedisKey = BANK_DETECT_KEY + eventDetector.getDetectorGroupId() + "::" + eventDetector.getPreviousDetectorId() + "::" + event.getAccountNo();
         Event previousDetectedEvent = (Event) redisDao.getValue(detectedEventRedisKey);
         // 잔액 조건
         if (isExistAmountClause(eventDetector) && isExistTimeClause(eventDetector)) {
@@ -106,22 +120,24 @@ public class EventDetectService {
             try {
                 saveDetectedEvent(eventDetector, event);
             } catch (Exception e) {
-                log.error("Failed Save detected event ! : " + eventDetector + " & " + event);
+                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => "+e.getMessage());
             }
         }
         return isDetect;
     }
 
+    // 금액 or 시간 조건 탐지
     private Boolean isDetectAmountAndTime(EventDetector eventDetector, Event event) {
         Boolean isDetect = false;
         // 이전 조건에서 탐지된 이벤트 발생 시간 가져오기
-        String detectedEventRedisKey = BANK_DETECT_KEY + eventDetector.getDetectorGroupId() + "::" + eventDetector.getDetectorId() + "::" + event.getAccountNo();
+        String detectedEventRedisKey = BANK_DETECT_KEY + eventDetector.getDetectorGroupId() + "::" + eventDetector.getPreviousDetectorId() + "::" + event.getAccountNo();
         Event previousDetectedEvent = (Event) redisDao.getValue(detectedEventRedisKey);
         // 시간 && 금액 조건
         Boolean isTypeEqual = eventDetector.getDetectorType().equals(event.getEventType());
         if (isTypeEqual) {
             if (isExistAmountClause(eventDetector) && isExistTimeClause(eventDetector)) {
-                isDetect = checkAmountCondition(eventDetector, event.getAmount()) && checkTimeCondition(eventDetector, previousDetectedEvent.getEventTime());
+                isDetect = checkAmountCondition(eventDetector, event.getAmount())
+                        && checkTimeCondition(eventDetector, previousDetectedEvent.getEventTime());
             } else if (isExistAmountClause(eventDetector)) {
                 isDetect = checkAmountCondition(eventDetector, event.getAmount());
             } else if (isExistTimeClause(eventDetector)) {
@@ -133,7 +149,7 @@ public class EventDetectService {
             try {
                 saveDetectedEvent(eventDetector, event);
             } catch (Exception e) {
-                log.error("Failed Save detected event ! : " + eventDetector + " & " + event);
+                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => "+e.getMessage());
             }
         }
         return isDetect;
@@ -157,10 +173,52 @@ public class EventDetectService {
         }
     }
 
+    // 상한/하한 조건 체크 : 조건에 벗어나면 false
+    private Boolean checkLimit(Long target, Long upperLimit, Long lowerLimit) {
+        if (lowerLimit == null && upperLimit == null) {
+            return true;
+        } else if (lowerLimit == null) {
+            return target <= upperLimit;
+        } else if (upperLimit == null) {
+            return lowerLimit <= target;
+        } else {
+            return lowerLimit <= target && target <= upperLimit;
+        }
+    }
+
+    // 시간차이 조건 : 조건에 벗어나면 false
+    private Boolean checkTimeCondition(EventDetector eventDetector, Long eventTime) {
+        Long diff = System.currentTimeMillis()/1000 - eventTime;
+        Long timeUpperLimit = eventDetector.getTimeUpperLimit();
+        Long timeLowerLimit = eventDetector.getTimeLowerLimit();
+        return checkLimit(diff, timeUpperLimit, timeLowerLimit);
+    }
+
+    // 금액차이 조건 : 조건에 벗어나면 false
+    private Boolean checkAmountCondition(EventDetector eventDetector, Long amount) {
+        Long amountUpperLimit = eventDetector.getAmountUpperLimit();
+        Long amountLowerLimit = eventDetector.getAmountLowerLimit();
+        return checkLimit(amount, amountUpperLimit, amountLowerLimit);
+    }
+
+    // kafka msg 발송
+    private Boolean sendMsg(String msg) {
+        Boolean send;
+        String topic = env.getProperty("produce.topic");
+        try {
+            kafkaProducer.publish(topic, msg);
+            log.info("Msg publishing Success !");
+            send = true;
+        } catch (Exception e) {
+            send = false;
+            log.error("Msg publishing Failed !");
+        }
+        return send;
+    }
+
     // 조건별 탐지 결과 저장
     private void saveDetectedEvent(EventDetector eventDetector, Event event) throws Exception {
         String detectedEventRedisKey = BANK_DETECT_KEY + eventDetector.getDetectorGroupId() + "::" + eventDetector.getDetectorId() + "::" + event.getAccountNo();
-
         redisDao.setValue(detectedEventRedisKey, event);
         // 시간 조건이 있는 경우, 해당 시간으로 expire를 설정. 없는 경우는 디폴트로 1일 보관
         if (eventDetector.getTimeUpperLimit() != null) {
@@ -229,48 +287,5 @@ public class EventDetectService {
             success = false;
         }
         return success;
-    }
-
-    // 상한/하한 조건 체크 : 조건에 벗어나면 false
-    private Boolean checkLimit(Long target, Long upperLimit, Long lowerLimit) {
-        if (lowerLimit == null && upperLimit == null) {
-            return true;
-        } else if (lowerLimit == null) {
-            return upperLimit <= target;
-        } else if (upperLimit == null) {
-            return target <= lowerLimit;
-        } else {
-            return target <= lowerLimit && upperLimit <= target;
-        }
-    }
-
-    // 시간차이 조건 : 조건에 벗어나면 false
-    private Boolean checkTimeCondition(EventDetector eventDetector, Long eventTime) {
-        Long diff = System.currentTimeMillis() - eventTime;
-        Long timeUpperLimit = eventDetector.getTimeUpperLimit();
-        Long timeLowerLimit = eventDetector.getTimeLowerLimit();
-        return checkLimit(diff, timeUpperLimit, timeLowerLimit);
-    }
-
-    // 금액차이 조건 : 조건에 벗어나면 false
-    private Boolean checkAmountCondition(EventDetector eventDetector, Long amount) {
-        Long amountUpperLimit = eventDetector.getAmountUpperLimit();
-        Long amountLowerLimit = eventDetector.getAmountLowerLimit();
-        return checkLimit(amount, amountUpperLimit, amountLowerLimit);
-    }
-
-    // kafka msg 발송
-    private Boolean sendMsg(String msg) {
-        Boolean send;
-        String topic = env.getProperty("produce.topic");
-        try {
-            kafkaProducer.publish(topic, msg);
-            log.info("Msg publishing Success !");
-            send = true;
-        } catch (Exception e) {
-            send = false;
-            log.error("Msg publishing Failed !");
-        }
-        return send;
     }
 }

@@ -3,6 +3,7 @@ package com.kakaobank.data.dao;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 
 import java.util.Collection;
 import java.util.List;
@@ -16,11 +17,13 @@ import java.util.concurrent.TimeUnit;
  * @param <K> the Redis key type against which the template works (usually a String)
  * @param <V> the Redis value type against which the template works
  */
-@Component
+@Repository
 public class RedisDao<K, V> {
 
     @Autowired
     private RedisTemplate<K, V> redisTemplate;
+
+    public Boolean isExist(K key) { return redisTemplate.hasKey(key); }
 
     public V getValue(K key) {
         return redisTemplate.opsForValue().get(key);

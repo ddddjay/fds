@@ -38,6 +38,7 @@ public class EventConsumerService implements Runnable {
         topics.add(env.getProperty("consume.topic"));
         try {
             kafkaConsumer.subscribe(topics);
+            ArrayList<EventDetector> edg = (ArrayList) eventDetect.getDetectorGroup("detectorGroup_1");
             while (true) {
                 for (ConsumerRecord<String, Object> record : kafkaConsumer.poll(Long.MAX_VALUE)) {
                     String eventString = record.value().toString();
@@ -52,10 +53,13 @@ public class EventConsumerService implements Runnable {
                         accountService.service(event);
 
                         // 이벤트 탐지
-                        for (EventDetector detector : eventDetect.getDetectorGroup("detectorGroup_1")) {
-                            log.info("Detector : " + detector);
-                            eventDetect.detect(detector, event);
-                        }
+                        if (!event.getEventType().equals("create"))
+                            for (EventDetector detector : edg) {
+                                log.info("Detector : " + detector);
+                                if(!eventDetect.detect(detector, event)){
+                                    break;
+                                };
+                            }
 
                     } catch (Exception e) {
                         log.error("Consumer Error : " + e.getMessage());

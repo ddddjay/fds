@@ -4,11 +4,12 @@ import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
 
 /**
  * Created by djyun on 2017. 6. 18..
  */
-@Component
+@Service
 public class EventProducerService {
 
     @Autowired
