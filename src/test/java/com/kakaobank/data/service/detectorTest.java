@@ -24,10 +24,10 @@ public class detectorTest extends BaseClass {
     public void addDetectorGroupTest(){
         String bankDetectorGroupKey = "bank::detectorgroup";
 
-        String eventDetectorGroupId = "detectorGroup_1";
+        String eventDetectorGroupId = "detectorGroup_3";
         EventDetectorGroup edg = new EventDetectorGroup();
         edg.setDetectorGroupId(eventDetectorGroupId);
-        edg.setDetectorGroupName("Rule-A");
+        edg.setDetectorGroupName("Rule-C");
         edg.setServiceYN("Y");
 
         List detectorIdList = new ArrayList<String>();
@@ -36,12 +36,12 @@ public class detectorTest extends BaseClass {
         detectorIdList.add(eventDetectorGroupId+".3");
         edg.setDetectorIdList(detectorIdList);
 
-//        eventDetectService.addDetectorGroup(edg);
+        eventDetectService.addDetectorGroup(edg);
 
-//        redisDao.setValue(bankDetectorGroupKey+"::"+eventDetectorGroupId, edg);
-//        redisDao.rightPush(bankDetectorGroupKey,edg);
+        redisDao.setValue(bankDetectorGroupKey+"::"+eventDetectorGroupId, edg);
+        redisDao.rightPush(bankDetectorGroupKey,edg);
 
-//        // detector
+        // detector
         EventDetector ed = new EventDetector();
         ed.setDetectorGroupId(eventDetectorGroupId);
         ed.setDetectorId(eventDetectorGroupId+".1");
@@ -49,31 +49,32 @@ public class detectorTest extends BaseClass {
         ed.setTimeUpperLimit(1000 * 60 * 60 * 24 * 7L);
         ed.setNextDetectorId(eventDetectorGroupId+".2");
         ed.setIndex("1");
-//        eventDetectService.addDetector(ed);
+        eventDetectService.addDetector(ed);
 
         EventDetector ed1 = new EventDetector();
         ed1.setDetectorGroupId(eventDetectorGroupId);
         ed1.setDetectorId(eventDetectorGroupId+".2");
         ed1.setDetectorType("deposit");
-        ed1.setAmountUpperLimit(1000000L);
-        ed1.setAmountLowerLimit(900000L);
+        ed1.setAmountUpperLimit(10000000L);
+        ed1.setAmountLowerLimit(100000L);
         ed1.setIndex("2");
         ed1.setPreviousDetectorId(eventDetectorGroupId+".1");
         ed1.setNextDetectorId(eventDetectorGroupId+".3");
-//        eventDetectService.addDetector(ed1);
+        eventDetectService.addDetector(ed1);
 
         EventDetector ed2 = new EventDetector();
         ed2.setDetectorGroupId(eventDetectorGroupId);
         ed2.setDetectorId(eventDetectorGroupId+".3");
         ed2.setDetectorType("balance");
         ed2.setTimeUpperLimit(1000 * 60 * 60 * 2L);
-        ed2.setAmountUpperLimit(10000L);
+        ed2.setAmountUpperLimit(3000000L);
+        ed1.setAmountLowerLimit(100000L);
         ed2.setIndex("3");
         ed2.setPreviousDetectorId(eventDetectorGroupId+".2");
-//        eventDetectService.addDetector(ed2);
+        eventDetectService.addDetector(ed2);
 
-//        eventDetectService.getAllDetectorGroup();
-//        eventDetectService.getDetectorGroup(eventDetectorGroupId);
+        eventDetectService.getAllDetectorGroup();
+        eventDetectService.getDetectorGroup(eventDetectorGroupId);
 
     }
 }

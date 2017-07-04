@@ -15,15 +15,19 @@ public class EventProducerService {
     @Autowired
     private KafkaProducer<String, String> kafkaProducer;
 
-    public void publish(String topic, String msg) {
+    public Boolean publish(String topic, String msg) {
+        Boolean isSend = false;
         try {
             ProducerRecord record = new ProducerRecord<String,String>(topic,msg);
             kafkaProducer.send(record);
+            isSend = true;
         } catch (Exception e) {
             e.printStackTrace();
-        } finally {
-            kafkaProducer.close();
-        }
+        }// finally {
+//            kafkaProducer.flush();
+//            kafkaProducer.close();
+//        }
+        return isSend;
     }
 
     public void flush() {

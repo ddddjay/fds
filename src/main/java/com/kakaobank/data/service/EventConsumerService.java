@@ -31,6 +31,9 @@ public class EventConsumerService implements Runnable {
     private KafkaConsumer<String, Object> kafkaConsumer;
 
     @Autowired
+    private EventProducerService kafkaProducer;
+
+    @Autowired
     private EventDetectService eventDetect;
 
     @Autowired
@@ -40,7 +43,7 @@ public class EventConsumerService implements Runnable {
         topics.add(env.getProperty("consume.topic"));
         try {
             kafkaConsumer.subscribe(topics);
-            ArrayList<EventDetector> edg = (ArrayList) eventDetect.getDetectorGroup("detectorGroup_1");
+            ArrayList<EventDetector> edg = (ArrayList) eventDetect.getDetectorGroup("detectorGroup_3");
             while (true) {
                 for (ConsumerRecord<String, Object> record : kafkaConsumer.poll(Long.MAX_VALUE)) {
                     String eventString = record.value().toString();
@@ -61,7 +64,6 @@ public class EventConsumerService implements Runnable {
                                 if (!eventDetect.detect(detector, event)) {
                                     break;
                                 }
-                                ;
                             }
 
                     } catch (Exception e) {
@@ -74,6 +76,8 @@ public class EventConsumerService implements Runnable {
             if (!closed.get()) throw e;
         } finally {
             kafkaConsumer.close();
+            kafkaProducer.flush();
+            kafkaProducer.close();
         }
     }
 

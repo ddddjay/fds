@@ -75,9 +75,7 @@ public class EventDetectService {
         if (isDetect && eventDetector.getNextDetectorId() == null) {
             String msg = "Detect Fraud Event !!!! , EventDetector ID : " + eventDetector.getDetectorGroupId() + ", Account : " + account + ", Event : " + event;
             log.info("Message :::: " + msg);
-
-            Boolean isSend = sendMsg(msg);
-            if (isSend) log.info("Detect Msg publishing Success !!!!!!!!");
+            if (sendMsg(msg)) log.info("Detect Msg publishing Success !!!!!!!!");
             else log.info("Detect Msg publishing Failed !!!!!!!!");
         } else {
             log.info("Message :::: It is NOT Fraud Event");
@@ -210,19 +208,10 @@ public class EventDetectService {
 
     // kafka msg 발송
     private Boolean sendMsg(String msg) {
-        Boolean send;
+        Boolean isSend = false;
         String topic = env.getProperty("produce.topic");
-
-        try {
-            kafkaProducer.publish(topic, msg);
-            kafkaProducer.flush();
-            send = true;
-        } catch (Exception e) {
-            send = false;
-        } finally {
-            kafkaProducer.close();
-        }
-        return send;
+        isSend = kafkaProducer.publish(topic, msg);
+        return isSend;
     }
 
     // 조건별 탐지 결과 저장
