@@ -36,7 +36,6 @@ public class EventConsumerService implements Runnable {
     @Autowired
     private AccountService accountService;
 
-
     public void run() {
         topics.add(env.getProperty("consume.topic"));
         try {
@@ -59,9 +58,10 @@ public class EventConsumerService implements Runnable {
                         if (!event.getEventType().equals("create"))
                             for (EventDetector detector : edg) {
                                 log.info("Detector : " + detector);
-                                if(!eventDetect.detect(detector, event)){
+                                if (!eventDetect.detect(detector, event)) {
                                     break;
-                                };
+                                }
+                                ;
                             }
 
                     } catch (Exception e) {

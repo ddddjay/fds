@@ -70,17 +70,19 @@ public class EventDetectService {
                     break;
             }
         }
-        log.info("result1 :::: " + isDetect);
-        log.info("result2 :::: " + eventDetector.getNextDetectorId());
-        log.info("result3 :::: " + (eventDetector.getNextDetectorId() == null));
+
         // 마지막 조건에 탐지되면 Kafka 'detect' Topic 에 메시지 발송
         if (isDetect && eventDetector.getNextDetectorId() == null) {
             String msg = "Detect Fraud Event !!!! , EventDetector ID : " + eventDetector.getDetectorGroupId() + ", Account : " + account + ", Event : " + event;
             log.info("Message :::: " + msg);
+
             Boolean isSend = sendMsg(msg);
-            if(isSend) log.info("Detect Msg publishing Success !!!!!!!!");
+            if (isSend) log.info("Detect Msg publishing Success !!!!!!!!");
             else log.info("Detect Msg publishing Failed !!!!!!!!");
+        } else {
+            log.info("Message :::: It is NOT Fraud Event");
         }
+
         return isDetect;
     }
 
@@ -213,7 +215,7 @@ public class EventDetectService {
 
         try {
             kafkaProducer.publish(topic, msg);
-            kafkaProducer.publish(topic, "Detect Success");
+            kafkaProducer.flush();
             send = true;
         } catch (Exception e) {
             send = false;
