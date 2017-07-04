@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Created by djyun on 2017. 6. 13..
@@ -20,6 +21,7 @@ import java.util.List;
 @Slf4j
 @Service
 public class EventConsumerService implements Runnable {
+    private final AtomicBoolean closed = new AtomicBoolean(false);
     private final List<String> topics = new ArrayList<>();
 
     @Autowired
@@ -33,6 +35,7 @@ public class EventConsumerService implements Runnable {
 
     @Autowired
     private AccountService accountService;
+
 
     public void run() {
         topics.add(env.getProperty("consume.topic"));
@@ -68,13 +71,15 @@ public class EventConsumerService implements Runnable {
             }
         } catch (WakeupException e) {
             // ignore for shutdown
+            if (!closed.get()) throw e;
         } finally {
             kafkaConsumer.close();
         }
-
     }
 
+    // Shutdown hook which can be called from a separate thread
     public void shutdown() {
+        closed.set(true);
         kafkaConsumer.wakeup();
     }
 }

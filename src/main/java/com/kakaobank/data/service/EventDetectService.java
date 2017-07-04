@@ -6,6 +6,7 @@ import com.kakaobank.data.model.Event;
 import com.kakaobank.data.model.EventDetector;
 import com.kakaobank.data.model.EventDetectorGroup;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang.ObjectUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
@@ -53,10 +54,10 @@ public class EventDetectService {
         // 이전 이벤트가 탐지조건에 이미 탐지되었는지 확인
         String detectedEventRedisKey = BANK_DETECT_KEY + eventDetector.getDetectorGroupId() + "::" + eventDetector.getDetectorId() + "::" + event.getAccountNo();
         Boolean isExistDetected = redisDao.isExist(detectedEventRedisKey);
-        if(isExistDetected) {
+        if (isExistDetected) {
             log.info("Detected : " + eventDetector);
             isDetect = true;
-        }else{
+        } else {
             switch (eventDetector.getDetectorType()) {
                 case "create":
                     isDetect = isDetectCreatedTime(eventDetector, event, account);
@@ -69,12 +70,16 @@ public class EventDetectService {
                     break;
             }
         }
-
+        log.info("result1 :::: " + isDetect);
+        log.info("result2 :::: " + eventDetector.getNextDetectorId());
+        log.info("result3 :::: " + (eventDetector.getNextDetectorId() == null));
         // 마지막 조건에 탐지되면 Kafka 'detect' Topic 에 메시지 발송
         if (isDetect && eventDetector.getNextDetectorId() == null) {
-            String msg = "Detect Fraud Event ! , EventDetector ID : " + eventDetector.getDetectorGroupId() + ", Account : " + account + ", Event : " + event;
-            log.info(msg);
-            sendMsg(msg);
+            String msg = "Detect Fraud Event !!!! , EventDetector ID : " + eventDetector.getDetectorGroupId() + ", Account : " + account + ", Event : " + event;
+            log.info("Message :::: " + msg);
+            Boolean isSend = sendMsg(msg);
+            if(isSend) log.info("Detect Msg publishing Success !!!!!!!!");
+            else log.info("Detect Msg publishing Failed !!!!!!!!");
         }
         return isDetect;
     }
@@ -93,7 +98,7 @@ public class EventDetectService {
             try {
                 saveDetectedEvent(eventDetector, event);
             } catch (Exception e) {
-                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => "+e.getMessage());
+                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => " + e.getMessage());
             }
         }
         return isDetect;
@@ -120,7 +125,7 @@ public class EventDetectService {
             try {
                 saveDetectedEvent(eventDetector, event);
             } catch (Exception e) {
-                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => "+e.getMessage());
+                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => " + e.getMessage());
             }
         }
         return isDetect;
@@ -149,7 +154,7 @@ public class EventDetectService {
             try {
                 saveDetectedEvent(eventDetector, event);
             } catch (Exception e) {
-                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => "+e.getMessage());
+                log.error("Failed Save detected event ! : " + eventDetector + " & " + event + " => " + e.getMessage());
             }
         }
         return isDetect;
@@ -188,7 +193,7 @@ public class EventDetectService {
 
     // 시간차이 조건 : 조건에 벗어나면 false
     private Boolean checkTimeCondition(EventDetector eventDetector, Long eventTime) {
-        Long diff = System.currentTimeMillis()/1000 - eventTime;
+        Long diff = System.currentTimeMillis() / 1000 - eventTime;
         Long timeUpperLimit = eventDetector.getTimeUpperLimit();
         Long timeLowerLimit = eventDetector.getTimeLowerLimit();
         return checkLimit(diff, timeUpperLimit, timeLowerLimit);
@@ -205,13 +210,15 @@ public class EventDetectService {
     private Boolean sendMsg(String msg) {
         Boolean send;
         String topic = env.getProperty("produce.topic");
+
         try {
             kafkaProducer.publish(topic, msg);
-            log.info("Msg publishing Success !");
+            kafkaProducer.publish(topic, "Detect Success");
             send = true;
         } catch (Exception e) {
             send = false;
-            log.error("Msg publishing Failed !");
+        } finally {
+            kafkaProducer.close();
         }
         return send;
     }
